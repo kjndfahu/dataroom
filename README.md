@@ -114,7 +114,49 @@ apps/
 
 ---
 
-## Local setup
+## Run it with Docker
+
+The compose stack is self-contained — PostgreSQL, S3-compatible storage
+(MinIO), the API and the web app. No Supabase account, no local Node needed.
+
+```bash
+docker compose up --build          # web on :3000, API on :4000
+docker compose run --rm seed       # demo user, folder tree and sample PDFs
+```
+
+Then open <http://localhost:3000> and sign in as `demo@dataroom.app` /
+`demo1234`. MinIO's console is on <http://localhost:9001> (`dataroom` /
+`dataroom-secret`) if you want to see the stored objects.
+
+```bash
+docker compose down                # stop, keep the data
+docker compose down -v             # stop and discard database + bucket
+```
+
+The API container applies migrations on start, so the schema is always in step
+with the image. Every credential in `docker-compose.yml` is a local-only
+default; each one can be overridden from a `.env` file next to the compose file,
+which is also how you point the stack at Supabase instead:
+
+```env
+DATABASE_URL=postgresql://…pooler.supabase.com:5432/postgres
+S3_ENDPOINT=https://<project>.storage.supabase.co/storage/v1/s3
+S3_PUBLIC_ENDPOINT=
+S3_ACCESS_KEY_ID=…
+S3_SECRET_ACCESS_KEY=…
+```
+
+`S3_PUBLIC_ENDPOINT` exists because a presigned URL is signed for one specific
+host: inside the compose network the API reaches MinIO at `http://storage:9000`,
+while the browser must use `http://localhost:9000`. Leave it empty for Supabase
+or AWS, where both sides use the same address.
+
+Ports can be moved with `WEB_PORT`, `API_PORT`, `DB_PORT`, `STORAGE_PORT` if
+something is already listening.
+
+---
+
+## Local setup without Docker
 
 Prerequisites: Node 20+, pnpm 11+, a PostgreSQL database and an S3-compatible
 bucket (Supabase provides both).

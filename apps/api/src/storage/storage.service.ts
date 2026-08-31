@@ -25,6 +25,9 @@ export interface PresignedUpload {
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly client: S3Client;
+  /** Signs URLs for the browser; identical to `client` unless the public
+   *  endpoint differs from the internal one. */
+  private readonly signer: S3Client;
   private readonly bucket: string;
   private readonly urlTtl: number;
 
@@ -32,15 +35,30 @@ export class StorageService {
     this.bucket = config.get('S3_BUCKET', { infer: true });
     this.urlTtl = config.get('S3_URL_TTL', { infer: true });
 
+    const credentials = {
+      accessKeyId: config.get('S3_ACCESS_KEY_ID', { infer: true }),
+      secretAccessKey: config.get('S3_SECRET_ACCESS_KEY', { infer: true }),
+    };
+    const region = config.get('S3_REGION', { infer: true });
+
     this.client = new S3Client({
       endpoint: config.get('S3_ENDPOINT', { infer: true }),
-      region: config.get('S3_REGION', { infer: true }),
+      region,
       forcePathStyle: true,
-      credentials: {
-        accessKeyId: config.get('S3_ACCESS_KEY_ID', { infer: true }),
-        secretAccessKey: config.get('S3_SECRET_ACCESS_KEY', { infer: true }),
-      },
+      credentials,
     });
+
+    // A presigned URL is signed for one specific host, so when the browser
+    // reaches storage at a different address it needs its own signer.
+    const publicEndpoint = config.get('S3_PUBLIC_ENDPOINT', { infer: true });
+    this.signer = publicEndpoint
+      ? new S3Client({
+          endpoint: publicEndpoint,
+          region,
+          forcePathStyle: true,
+          credentials,
+        })
+      : this.client;
   }
 
   /** Storage keys are generated, never derived from user-supplied file names. */
@@ -55,7 +73,7 @@ export class StorageService {
     const storageKey = this.buildStorageKey(dataRoomId);
 
     const url = await getSignedUrl(
-      this.client,
+      this.signer,
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: storageKey,
@@ -74,7 +92,7 @@ export class StorageService {
     const disposition = options.inline ? 'inline' : 'attachment';
 
     return getSignedUrl(
-      this.client,
+      this.signer,
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: storageKey,

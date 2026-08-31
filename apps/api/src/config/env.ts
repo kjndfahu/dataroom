@@ -17,6 +17,16 @@ export const envSchema = z.object({
   AUTH_TOKEN_TTL: z.string().default('7d'),
 
   S3_ENDPOINT: z.string().url(),
+  /**
+   * Host the browser should use for presigned URLs, when it differs from the
+   * one the API talks to (a container network reaches MinIO at http://minio:9000
+   * while the browser reaches it at http://localhost:9000).
+   */
+  S3_PUBLIC_ENDPOINT: z.preprocess(
+    // An empty value in a .env file means "same as S3_ENDPOINT".
+    (value) => (value === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
   S3_REGION: z.string().min(1),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
