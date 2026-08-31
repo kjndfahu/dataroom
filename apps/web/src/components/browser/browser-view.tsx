@@ -9,6 +9,8 @@ import { Breadcrumbs } from "@/components/browser/breadcrumbs";
 import { ItemTable, ItemTableSkeleton } from "@/components/browser/item-table";
 import { useFolderContents } from "@/components/browser/use-folder-contents";
 import { PdfPreviewDialog } from "@/components/files/pdf-preview-dialog";
+import { FolderActions } from "@/components/browser/folder-actions";
+import { CreateFolderDialog } from "@/components/dialogs/create-folder-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
@@ -77,6 +79,8 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
   }
 
   const isLoadingHeader = room.isPending || (Boolean(folderId) && folder.isPending);
+  // The API decides: viewers never receive edit rights, so no controls render.
+  const canEdit = folderId ? (folder.data?.canEdit ?? false) : contents.canEdit;
   const trail = folderId
     ? (folder.data?.breadcrumbs ?? [])
     : [{ id: null, name: room.data?.name ?? "" }];
@@ -106,6 +110,15 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
                   </p>
                 )}
               </div>
+
+              {canEdit && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <CreateFolderDialog
+                    dataRoomId={dataRoomId}
+                    parentFolderId={folderId}
+                  />
+                </div>
+              )}
             </div>
           </>
         )}
@@ -136,6 +149,17 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
             folders={contents.folders}
             files={contents.files}
             onOpenFile={setPreviewFile}
+            renderFolderActions={
+              canEdit
+                ? (item) => (
+                    <FolderActions
+                      dataRoomId={dataRoomId}
+                      parentFolderId={folderId}
+                      folder={item}
+                    />
+                  )
+                : undefined
+            }
           />
 
           {contents.hasMore && (
