@@ -11,6 +11,13 @@ import { useFolderContents } from "@/components/browser/use-folder-contents";
 import { PdfPreviewDialog } from "@/components/files/pdf-preview-dialog";
 import { FolderActions } from "@/components/browser/folder-actions";
 import { CreateFolderDialog } from "@/components/dialogs/create-folder-dialog";
+import {
+  UploadButton,
+  UploadDropzone,
+} from "@/components/upload/upload-dropzone";
+import { UploadQueue } from "@/components/upload/upload-queue";
+import { useUploadQueue } from "@/components/upload/use-upload-queue";
+import { useRefreshLocation } from "@/components/browser/use-refresh";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
@@ -43,6 +50,13 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
   });
 
   const contents = useFolderContents(dataRoomId, folderId);
+  const refresh = useRefreshLocation(dataRoomId);
+
+  const uploads = useUploadQueue({
+    dataRoomId,
+    folderId,
+    onUploaded: () => void refresh(folderId),
+  });
 
   // A folder can vanish while it is on screen — fall back to the room root.
   const folderGone =
@@ -86,7 +100,8 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
     : [{ id: null, name: room.data?.name ?? "" }];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
+    <UploadDropzone disabled={!canEdit} onFiles={uploads.enqueue}>
+      <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <header className="space-y-3">
         {isLoadingHeader ? (
           <div className="space-y-2">
@@ -117,6 +132,7 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
                     dataRoomId={dataRoomId}
                     parentFolderId={folderId}
                   />
+                  <UploadButton onFiles={uploads.enqueue} />
                 </div>
               )}
             </div>
@@ -137,8 +153,8 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
           icon={<FolderOpen className="size-8" />}
           title="This folder is empty"
           description={
-            contents.canEdit
-              ? "Upload a PDF or create a folder to get started."
+            canEdit
+              ? "Drop a PDF here, or use Upload and New folder above."
               : "Nothing has been added here yet."
           }
         />
@@ -183,6 +199,16 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
         file={previewFile}
         onOpenChange={(open) => !open && setPreviewFile(null)}
       />
-    </div>
+
+      <UploadQueue
+        items={uploads.items}
+        onRetry={uploads.retry}
+        onKeepBoth={uploads.keepBoth}
+        onCancel={uploads.cancel}
+        onDismiss={uploads.dismiss}
+        onClearFinished={uploads.clearFinished}
+      />
+      </div>
+    </UploadDropzone>
   );
 }
