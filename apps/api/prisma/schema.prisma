@@ -1,0 +1,154 @@
+// Data Room — domain model.
+// Sharing is modelled polymorphically: one Share/PublicLink row points at exactly
+// one resource (dataRoom | folder | file). Access to a container implies read
+// access to its whole subtree, resolved at query time — no rows per descendant.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+// Connection URLs live in prisma.config.ts (Migrate) and in the PrismaService
+// adapter (runtime) — Prisma 7 no longer reads them from the schema.
+datasource db {
+  provider = "postgresql"
+}
+
+enum ResourceType {
+  DATA_ROOM
+  FOLDER
+  FILE
+}
+
+// MVP grants VIEWER only; EDITOR/OWNER exist so roles can grow without a migration.
+enum ShareRole {
+  VIEWER
+  EDITOR
+  OWNER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  avatarUrl    String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  dataRooms      DataRoom[]
+  uploadedFiles  File[]       @relation("FileUploader")
+  sharesGranted  Share[]      @relation("ShareOwner")
+  sharesReceived Share[]      @relation("ShareRecipient")
+  publicLinks    PublicLink[]
+}
+
+model DataRoom {
+  id        String   @id @default(uuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folders     Folder[]
+  files       File[]
+  shares      Share[]
+  publicLinks PublicLink[]
+
+  @@index([ownerId])
+}
+
+model Folder {
+  id             String   @id @default(uuid())
+  name           String
+  dataRoomId     String
+  parentFolderId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  dataRoom     DataRoom     @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  parentFolder Folder?      @relation("FolderTree", fields: [parentFolderId], references: [id], onDelete: Cascade)
+  children     Folder[]     @relation("FolderTree")
+  files        File[]
+  shares       Share[]
+  publicLinks  PublicLink[]
+
+  @@unique([dataRoomId, parentFolderId, name])
+  @@index([dataRoomId])
+  @@index([parentFolderId])
+}
+
+model File {
+  id           String   @id @default(uuid())
+  name         String
+  originalName String
+  mimeType     String
+  size         BigInt
+  storageKey   String   @unique
+  dataRoomId   String
+  folderId     String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  dataRoom    DataRoom     @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  folder      Folder?      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  uploadedBy  User         @relation("FileUploader", fields: [uploadedById], references: [id])
+  shares      Share[]
+  publicLinks PublicLink[]
+
+  @@unique([dataRoomId, folderId, name])
+  @@index([dataRoomId])
+  @@index([folderId])
+  @@index([createdAt])
+  @@index([name])
+}
+
+model Share {
+  id              String       @id @default(uuid())
+  resourceType    ResourceType
+  dataRoomId      String?
+  folderId        String?
+  fileId          String?
+  ownerId         String
+  recipientUserId String
+  role            ShareRole    @default(VIEWER)
+  createdAt       DateTime     @default(now())
+  revokedAt       DateTime?
+
+  dataRoom  DataRoom? @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  folder    Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  file      File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  owner     User      @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipient User      @relation("ShareRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId, revokedAt])
+  @@index([dataRoomId])
+  @@index([folderId])
+  @@index([fileId])
+  @@index([ownerId])
+}
+
+model PublicLink {
+  id           String       @id @default(uuid())
+  token        String       @unique
+  resourceType ResourceType
+  dataRoomId   String?
+  folderId     String?
+  fileId       String?
+  createdById  String
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  expiresAt    DateTime?
+
+  dataRoom  DataRoom? @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
+  folder    Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  file      File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([dataRoomId])
+  @@index([folderId])
+  @@index([fileId])
+  @@index([createdById])
+}
