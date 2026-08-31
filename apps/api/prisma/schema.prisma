@@ -4,8 +4,7 @@
 // access to its whole subtree, resolved at query time — no rows per descendant.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 // Connection URLs live in prisma.config.ts (Migrate) and in the PrismaService

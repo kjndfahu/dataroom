@@ -32,4 +32,3 @@ coverage/
 next-env.d.ts
 
 # prisma generated client
-apps/api/generated/

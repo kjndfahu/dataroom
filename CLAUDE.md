@@ -5,8 +5,8 @@ Monorepo: pnpm workspaces.
 - `apps/web` — Next.js 16 (App Router, `src/`), React 19, Tailwind v4, shadcn/ui, TanStack Query, RHF + Zod.
 - `apps/api` — NestJS 12 (ESM), Prisma 7 + PostgreSQL, S3-compatible storage, JWT auth.
 - `apps/api/prisma` — schema, migrations, seed. Prisma 7 keeps connection URLs in `prisma.config.ts`
-  and requires a driver adapter (`@prisma/adapter-pg`) at runtime; the generated client lives in
-  `apps/api/generated/prisma` (gitignored).
+  and requires a driver adapter (`@prisma/adapter-pg`) at runtime; the client is generated into `node_modules/@prisma/client`
+  (`pnpm db:generate` runs automatically before every API build).
 
 Rules:
 - Backend is authoritative for authorization — every resource lookup goes through the central

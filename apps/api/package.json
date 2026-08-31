@@ -25,7 +25,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "prebuild": "prisma generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",
@@ -45,7 +46,8 @@
     "helmet": "^8.3.0",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
