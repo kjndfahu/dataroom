@@ -162,7 +162,7 @@ export class AuthorizationService {
       WITH RECURSIVE ancestors AS (
         SELECT id, "parentFolderId"
         FROM "Folder"
-        WHERE id = ${folderId}::uuid
+        WHERE id = ${folderId}
         UNION ALL
         SELECT parent.id, parent."parentFolderId"
         FROM "Folder" parent

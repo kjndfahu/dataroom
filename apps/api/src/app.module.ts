@@ -7,6 +7,8 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { AuthorizationModule } from './authorization/authorization.module.js';
 import { DataRoomsModule } from './datarooms/datarooms.module.js';
+import { FoldersModule } from './folders/folders.module.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { DataRoomsModule } from './datarooms/datarooms.module.js';
     AuthModule,
     UsersModule,
     DataRoomsModule,
+    FoldersModule,
+    StorageModule,
   ],
 })
 export class AppModule {}
