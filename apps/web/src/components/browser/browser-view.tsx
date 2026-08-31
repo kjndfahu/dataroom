@@ -10,6 +10,7 @@ import { ItemTable, ItemTableSkeleton } from "@/components/browser/item-table";
 import { useFolderContents } from "@/components/browser/use-folder-contents";
 import { PdfPreviewDialog } from "@/components/files/pdf-preview-dialog";
 import { FolderActions } from "@/components/browser/folder-actions";
+import { FileActions } from "@/components/browser/file-actions";
 import { CreateFolderDialog } from "@/components/dialogs/create-folder-dialog";
 import {
   UploadButton,
@@ -172,6 +173,17 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
                       dataRoomId={dataRoomId}
                       parentFolderId={folderId}
                       folder={item}
+                    />
+                  )
+                : undefined
+            }
+            renderFileActions={
+              canEdit
+                ? (item) => (
+                    <FileActions
+                      dataRoomId={dataRoomId}
+                      folderId={folderId}
+                      file={item}
                     />
                   )
                 : undefined
