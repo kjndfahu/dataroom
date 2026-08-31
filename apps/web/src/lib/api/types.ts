@@ -110,3 +110,45 @@ export interface FolderTreeNode {
 }
 
 export type ConflictStrategy = "fail" | "keepBoth";
+
+export interface ShareSummary {
+  id: string;
+  resourceType: ResourceType;
+  resourceId: string;
+  resourceName: string;
+  role: ShareRole;
+  recipient: { id: string; email: string; name: string };
+  createdAt: string;
+}
+
+export interface ReceivedShare {
+  id: string;
+  resourceType: ResourceType;
+  resourceId: string;
+  resourceName: string;
+  role: ShareRole;
+  dataRoomId: string;
+  dataRoomName: string;
+  sharedBy: { id: string; name: string; email: string };
+  createdAt: string;
+}
+
+export interface PublicLinkSummary {
+  id: string;
+  token: string;
+  resourceType: ResourceType;
+  resourceId: string;
+  resourceName: string;
+  active: boolean;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+export interface PublicView {
+  resourceType: ResourceType;
+  name: string;
+  dataRoomId: string;
+  rootFolderId: string | null;
+  fileId: string | null;
+  breadcrumbs: Breadcrumb[];
+}

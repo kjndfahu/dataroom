@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { FolderOpen, Loader2 } from "lucide-react";
+import { FolderOpen, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/browser/breadcrumbs";
 import { ItemTable, ItemTableSkeleton } from "@/components/browser/item-table";
@@ -12,6 +12,7 @@ import { PdfPreviewDialog } from "@/components/files/pdf-preview-dialog";
 import { FolderActions } from "@/components/browser/folder-actions";
 import { FileActions } from "@/components/browser/file-actions";
 import { CreateFolderDialog } from "@/components/dialogs/create-folder-dialog";
+import { ShareDialog } from "@/components/sharing/share-dialog";
 import {
   UploadButton,
   UploadDropzone,
@@ -27,7 +28,7 @@ import { dataRooms, folders as foldersApi } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query-keys";
 import { formatBytes, pluralize } from "@/lib/format";
-import type { FileListItem } from "@/lib/api/types";
+import type { Breadcrumb, FileListItem } from "@/lib/api/types";
 
 interface BrowserViewProps {
   dataRoomId: string;
@@ -38,6 +39,7 @@ interface BrowserViewProps {
 export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
   const router = useRouter();
   const [previewFile, setPreviewFile] = useState<FileListItem | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const room = useQuery({
     queryKey: queryKeys.dataRoom(dataRoomId),
@@ -59,7 +61,7 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
     onUploaded: () => void refresh(folderId),
   });
 
-  // A folder can vanish while it is on screen — fall back to the room root.
+  // A folder can vanish, or its share be revoked, while it is on screen.
   const folderGone =
     folder.error instanceof ApiError && folder.error.isAccessProblem;
 
@@ -69,18 +71,28 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
     router.replace(`/dataroom/${dataRoomId}`);
   }, [folderGone, router, dataRoomId]);
 
-  if (room.isError) {
-    const denied = room.error instanceof ApiError && room.error.isAccessProblem;
+  // Someone with a folder-level share can open the folder but not the room, so
+  // the room query failing is only fatal when the room itself is the target.
+  const primaryFailed = folderId ? folder.isError : room.isError;
+
+  if (primaryFailed) {
+    const error = folderId ? folder.error : room.error;
+    const denied = error instanceof ApiError && error.isAccessProblem;
+
     return (
       <div className="p-6">
         <ErrorState
-          title={denied ? "This data room is not available" : "Could not load this data room"}
+          title={denied ? "This is no longer available" : "Something went wrong"}
           description={
             denied
               ? "It was deleted, or your access to it was removed."
               : "The server did not respond. Try again in a moment."
           }
-          onRetry={denied ? undefined : () => void room.refetch()}
+          onRetry={
+            denied
+              ? undefined
+              : () => void (folderId ? folder.refetch() : room.refetch())
+          }
           action={
             denied ? (
               <Button onClick={() => router.replace("/dashboard")}>
@@ -93,133 +105,169 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
     );
   }
 
-  const isLoadingHeader = room.isPending || (Boolean(folderId) && folder.isPending);
+  const isLoadingHeader = folderId ? folder.isPending : room.isPending;
   // The API decides: viewers never receive edit rights, so no controls render.
   const canEdit = folderId ? (folder.data?.canEdit ?? false) : contents.canEdit;
-  const trail = folderId
+  // Only the owner may share, and only owners get the OWNER role back.
+  const canShare = folderId
+    ? folder.data?.role === "OWNER"
+    : (room.data?.isOwner ?? false);
+  const roomReachable = room.isSuccess;
+
+  const trail: Breadcrumb[] = folderId
     ? (folder.data?.breadcrumbs ?? [])
     : [{ id: null, name: room.data?.name ?? "" }];
+
+  const hrefFor = (entry: Breadcrumb) => {
+    if (entry.id) return `/dataroom/${dataRoomId}/folder/${entry.id}`;
+    // Without room access the root crumb is a label, not a dead link.
+    return roomReachable ? `/dataroom/${dataRoomId}` : null;
+  };
 
   return (
     <UploadDropzone disabled={!canEdit} onFiles={uploads.enqueue}>
       <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
-      <header className="space-y-3">
-        {isLoadingHeader ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-64" />
-            <Skeleton className="h-8 w-72" />
-            <Skeleton className="h-4 w-48" />
-          </div>
-        ) : (
-          <>
-            <Breadcrumbs dataRoomId={dataRoomId} trail={trail} />
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold tracking-tight">
-                  {folderId ? folder.data?.name : room.data?.name}
-                </h1>
-                {room.data && !folderId && (
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {pluralize(room.data.stats.folderCount, "folder")} ·{" "}
-                    {pluralize(room.data.stats.fileCount, "file")} ·{" "}
-                    {formatBytes(room.data.stats.totalSize)}
-                  </p>
-                )}
-              </div>
-
-              {canEdit && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <CreateFolderDialog
-                    dataRoomId={dataRoomId}
-                    parentFolderId={folderId}
-                  />
-                  <UploadButton onFiles={uploads.enqueue} />
-                </div>
-              )}
+        <header className="space-y-3">
+          {isLoadingHeader ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-64" />
+              <Skeleton className="h-8 w-72" />
+              <Skeleton className="h-4 w-48" />
             </div>
-          </>
-        )}
-      </header>
+          ) : (
+            <>
+              <Breadcrumbs trail={trail} hrefFor={hrefFor} />
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="truncate text-2xl font-semibold tracking-tight">
+                    {folderId ? folder.data?.name : room.data?.name}
+                  </h1>
+                  {room.data && !folderId && (
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {pluralize(room.data.stats.folderCount, "folder")} ·{" "}
+                      {pluralize(room.data.stats.fileCount, "file")} ·{" "}
+                      {formatBytes(room.data.stats.totalSize)}
+                    </p>
+                  )}
+                </div>
 
-      {contents.isPending ? (
-        <ItemTableSkeleton />
-      ) : contents.isError ? (
-        <ErrorState
-          title="Could not load these items"
-          description="The list failed to load. Try again in a moment."
-          onRetry={contents.refetch}
-        />
-      ) : contents.folders.length === 0 && contents.files.length === 0 ? (
-        <EmptyState
-          icon={<FolderOpen className="size-8" />}
-          title="This folder is empty"
-          description={
-            canEdit
-              ? "Drop a PDF here, or use Upload and New folder above."
-              : "Nothing has been added here yet."
-          }
-        />
-      ) : (
-        <div className="space-y-4">
-          <ItemTable
-            dataRoomId={dataRoomId}
-            folders={contents.folders}
-            files={contents.files}
-            onOpenFile={setPreviewFile}
-            renderFolderActions={
+                <div className="flex flex-wrap items-center gap-2">
+                  {canEdit && (
+                    <>
+                      <CreateFolderDialog
+                        dataRoomId={dataRoomId}
+                        parentFolderId={folderId}
+                      />
+                      <UploadButton onFiles={uploads.enqueue} />
+                    </>
+                  )}
+                  {canShare && (
+                    <Button variant="outline" onClick={() => setSharing(true)}>
+                      <Share2 className="size-4" />
+                      Share
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </header>
+
+        {contents.isPending ? (
+          <ItemTableSkeleton />
+        ) : contents.isError ? (
+          <ErrorState
+            title="Could not load these items"
+            description="The list failed to load. Try again in a moment."
+            onRetry={contents.refetch}
+          />
+        ) : contents.folders.length === 0 && contents.files.length === 0 ? (
+          <EmptyState
+            icon={<FolderOpen className="size-8" />}
+            title="This folder is empty"
+            description={
               canEdit
-                ? (item) => (
-                    <FolderActions
-                      dataRoomId={dataRoomId}
-                      parentFolderId={folderId}
-                      folder={item}
-                    />
-                  )
-                : undefined
-            }
-            renderFileActions={
-              canEdit
-                ? (item) => (
-                    <FileActions
-                      dataRoomId={dataRoomId}
-                      folderId={folderId}
-                      file={item}
-                    />
-                  )
-                : undefined
+                ? "Drop a PDF here, or use Upload and New folder above."
+                : "Nothing has been added here yet."
             }
           />
+        ) : (
+          <div className="space-y-4">
+            <ItemTable
+              dataRoomId={dataRoomId}
+              folders={contents.folders}
+              files={contents.files}
+              onOpenFile={setPreviewFile}
+              renderFolderActions={
+                canEdit || canShare
+                  ? (item) => (
+                      <FolderActions
+                        dataRoomId={dataRoomId}
+                        parentFolderId={folderId}
+                        folder={item}
+                        canEdit={canEdit}
+                        canShare={canShare}
+                      />
+                    )
+                  : undefined
+              }
+              renderFileActions={
+                canEdit || canShare
+                  ? (item) => (
+                      <FileActions
+                        dataRoomId={dataRoomId}
+                        folderId={folderId}
+                        file={item}
+                        canEdit={canEdit}
+                        canShare={canShare}
+                      />
+                    )
+                  : undefined
+              }
+            />
 
-          {contents.hasMore && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={contents.loadMore}
-                disabled={contents.isLoadingMore}
-              >
-                {contents.isLoadingMore && (
-                  <Loader2 className="size-4 animate-spin" />
-                )}
-                {contents.isLoadingMore ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+            {contents.hasMore && (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={contents.loadMore}
+                  disabled={contents.isLoadingMore}
+                >
+                  {contents.isLoadingMore && (
+                    <Loader2 className="size-4 animate-spin" />
+                  )}
+                  {contents.isLoadingMore ? "Loading…" : "Load more"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
-      <PdfPreviewDialog
-        file={previewFile}
-        onOpenChange={(open) => !open && setPreviewFile(null)}
-      />
+        <PdfPreviewDialog
+          file={previewFile}
+          onOpenChange={(open) => !open && setPreviewFile(null)}
+        />
 
-      <UploadQueue
-        items={uploads.items}
-        onRetry={uploads.retry}
-        onKeepBoth={uploads.keepBoth}
-        onCancel={uploads.cancel}
-        onDismiss={uploads.dismiss}
-        onClearFinished={uploads.clearFinished}
-      />
+        {canShare && (
+          <ShareDialog
+            open={sharing}
+            onOpenChange={setSharing}
+            resourceType={folderId ? "FOLDER" : "DATA_ROOM"}
+            resourceId={folderId ?? dataRoomId}
+            resourceName={
+              (folderId ? folder.data?.name : room.data?.name) ?? "this item"
+            }
+          />
+        )}
+
+        <UploadQueue
+          items={uploads.items}
+          onRetry={uploads.retry}
+          onKeepBoth={uploads.keepBoth}
+          onCancel={uploads.cancel}
+          onDismiss={uploads.dismiss}
+          onClearFinished={uploads.clearFinished}
+        />
       </div>
     </UploadDropzone>
   );

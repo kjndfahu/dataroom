@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { FolderClosed, Users } from "lucide-react";
+import { FileText, Folder, FolderClosed, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/layout/logo";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSession } from "@/lib/auth/use-session";
-import { dataRooms } from "@/lib/api/endpoints";
+import { dataRooms, shares } from "@/lib/api/endpoints";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+import type { ReceivedShare } from "@/lib/api/types";
 
 /** Header + sidebar frame shared by every authenticated page. */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -37,9 +38,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Sidebar() {
   const pathname = usePathname();
+
   const rooms = useQuery({
     queryKey: queryKeys.dataRooms,
     queryFn: dataRooms.list,
+  });
+
+  const received = useQuery({
+    queryKey: queryKeys.receivedShares,
+    queryFn: shares.received,
   });
 
   return (
@@ -55,6 +62,7 @@ function Sidebar() {
                   key={room.id}
                   href={`/dataroom/${room.id}`}
                   active={pathname.startsWith(`/dataroom/${room.id}`)}
+                  icon={<FolderClosed className="size-3.5 shrink-0" />}
                 >
                   {room.name}
                 </SidebarLink>
@@ -65,16 +73,17 @@ function Sidebar() {
           </Section>
 
           <Section icon={Users} title="Shared with me">
-            {rooms.isPending ? (
+            {received.isPending ? (
               <SidebarSkeleton />
-            ) : rooms.data?.shared.length ? (
-              rooms.data.shared.map((room) => (
+            ) : received.data?.length ? (
+              received.data.map((share) => (
                 <SidebarLink
-                  key={room.id}
-                  href={`/dataroom/${room.id}`}
-                  active={pathname.startsWith(`/dataroom/${room.id}`)}
+                  key={share.id}
+                  href={hrefForShare(share)}
+                  active={pathname === hrefForShare(share)}
+                  icon={iconForShare(share)}
                 >
-                  {room.name}
+                  {share.resourceName}
                 </SidebarLink>
               ))
             ) : (
@@ -84,6 +93,25 @@ function Sidebar() {
         </nav>
       </ScrollArea>
     </aside>
+  );
+}
+
+function hrefForShare(share: ReceivedShare): string {
+  switch (share.resourceType) {
+    case "DATA_ROOM":
+      return `/dataroom/${share.dataRoomId}`;
+    case "FOLDER":
+      return `/dataroom/${share.dataRoomId}/folder/${share.resourceId}`;
+    case "FILE":
+      return `/file/${share.resourceId}`;
+  }
+}
+
+function iconForShare(share: ReceivedShare): ReactNode {
+  return share.resourceType === "FILE" ? (
+    <FileText className="size-3.5 shrink-0" />
+  ) : (
+    <Folder className="size-3.5 shrink-0" />
   );
 }
 
@@ -110,21 +138,24 @@ function Section({
 function SidebarLink({
   href,
   active,
+  icon,
   children,
 }: {
   href: string;
   active: boolean;
+  icon?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
       className={cn(
-        "hover:bg-accent hover:text-accent-foreground block truncate rounded-md px-2 py-1.5 text-sm transition-colors",
+        "hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
         active && "bg-accent text-accent-foreground font-medium",
       )}
     >
-      {children}
+      {icon}
+      <span className="truncate">{children}</span>
     </Link>
   );
 }

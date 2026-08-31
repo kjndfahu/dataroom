@@ -1,6 +1,11 @@
 import { apiFetch } from "./client";
 import type {
   ConflictStrategy,
+  PublicLinkSummary,
+  PublicView,
+  ReceivedShare,
+  ResourceType,
+  ShareSummary,
   DataRoomDetail,
   DataRoomSummary,
   FileDetail,
@@ -143,6 +148,57 @@ export const files = {
     apiFetch<{ id: string; orphanedObjects: number }>(`/files/${id}`, {
       method: "DELETE",
     }),
+};
+
+export const shares = {
+  list: (resourceType: ResourceType, resourceId: string) =>
+    apiFetch<ShareSummary[]>(
+      `/shares${query({ resourceType, resourceId })}`,
+    ),
+
+  received: () => apiFetch<ReceivedShare[]>("/shares/received"),
+
+  create: (body: {
+    resourceType: ResourceType;
+    resourceId: string;
+    email: string;
+  }) => apiFetch<ShareSummary>("/shares", { method: "POST", body }),
+
+  revoke: (id: string) => apiFetch<void>(`/shares/${id}`, { method: "DELETE" }),
+};
+
+export const publicLinks = {
+  list: (resourceType: ResourceType, resourceId: string) =>
+    apiFetch<PublicLinkSummary[]>(
+      `/public-links${query({ resourceType, resourceId })}`,
+    ),
+
+  create: (body: { resourceType: ResourceType; resourceId: string }) =>
+    apiFetch<PublicLinkSummary>("/public-links", { method: "POST", body }),
+
+  revoke: (id: string) =>
+    apiFetch<void>(`/public-links/${id}`, { method: "DELETE" }),
+};
+
+/** Anonymous browsing of a shared resource; no session is involved. */
+export const publicShare = {
+  view: (token: string, folderId?: string) =>
+    apiFetch<PublicView>(
+      `/public/${encodeURIComponent(token)}${query({ folderId })}`,
+    ),
+
+  items: (
+    token: string,
+    params?: { folderId?: string; folderCursor?: string; fileCursor?: string },
+  ) =>
+    apiFetch<FolderContents>(
+      `/public/${encodeURIComponent(token)}/items${query(params)}`,
+    ),
+
+  preview: (token: string, fileId: string) =>
+    apiFetch<FilePreview>(
+      `/public/${encodeURIComponent(token)}/files/${fileId}/preview`,
+    ),
 };
 
 function query(params?: Record<string, string | undefined>): string {

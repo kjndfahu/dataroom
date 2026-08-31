@@ -10,5 +10,14 @@ export const queryKeys = {
   items: (dataRoomId: string, folderId: string | null) =>
     ["items", dataRoomId, folderId ?? "root"] as const,
   file: (id: string) => ["file", id] as const,
+  shares: (resourceType: string, resourceId: string) =>
+    ["shares", resourceType, resourceId] as const,
+  receivedShares: ["shares", "received"] as const,
+  publicLinks: (resourceType: string, resourceId: string) =>
+    ["public-links", resourceType, resourceId] as const,
+  publicView: (token: string, folderId: string | null) =>
+    ["public", token, folderId ?? "root"] as const,
+  publicItems: (token: string, folderId: string | null) =>
+    ["public", token, "items", folderId ?? "root"] as const,
   filePreview: (id: string) => ["file", id, "preview"] as const,
 };
