@@ -65,11 +65,32 @@ export function BrowserView({ dataRoomId, folderId }: BrowserViewProps) {
   const folderGone =
     folder.error instanceof ApiError && folder.error.isAccessProblem;
 
+  // With room access there is a sensible place to land; without it (a folder
+  // shared on its own, now revoked) staying put with an explanation is better
+  // than bouncing into another error.
+  const canFallBackToRoom = room.isSuccess;
+
   useEffect(() => {
-    if (!folderGone) return;
+    if (!folderGone || !canFallBackToRoom) return;
     toast.error("That folder is no longer available.");
     router.replace(`/dataroom/${dataRoomId}`);
-  }, [folderGone, router, dataRoomId]);
+  }, [folderGone, canFallBackToRoom, router, dataRoomId]);
+
+  if (folderGone && !canFallBackToRoom) {
+    return (
+      <div className="p-6">
+        <ErrorState
+          title="Access revoked"
+          description="You no longer have access to this folder."
+          action={
+            <Button onClick={() => router.replace("/dashboard")}>
+              Back to data rooms
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
 
   // Someone with a folder-level share can open the folder but not the room, so
   // the room query failing is only fatal when the room itself is the target.
