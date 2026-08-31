@@ -7,5 +7,8 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.e2e-spec.ts'],
+    // Each test makes several round trips to a hosted database.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });

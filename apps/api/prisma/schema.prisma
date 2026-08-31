@@ -87,13 +87,15 @@ model File {
   storageKey   String   @unique
   dataRoomId   String
   folderId     String?
-  uploadedById String
+  uploadedById String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   dataRoom    DataRoom     @relation(fields: [dataRoomId], references: [id], onDelete: Cascade)
   folder      Folder?      @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  uploadedBy  User         @relation("FileUploader", fields: [uploadedById], references: [id])
+  // Documents outlive the account that uploaded them: deleting a collaborator
+  // must not remove files from someone else's data room.
+  uploadedBy  User?        @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   shares      Share[]
   publicLinks PublicLink[]
 
