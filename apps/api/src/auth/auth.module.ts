@@ -5,12 +5,14 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { UsersModule } from '../users/users.module.js';
+import { DataRoomsModule } from '../datarooms/datarooms.module.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import type { Env } from '../config/env.js';
 
 @Module({
   imports: [
     UsersModule,
+    DataRoomsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({

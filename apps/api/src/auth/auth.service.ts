@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import argon2 from 'argon2';
 import type { CookieOptions, Response } from 'express';
 import { UsersService, type PublicUser } from '../users/users.service.js';
+import { DataRoomsService } from '../datarooms/datarooms.service.js';
 import type { Env } from '../config/env.js';
 import type { JwtPayload } from './auth.types.js';
 import { AUTH_COOKIE } from './auth.constants.js';
@@ -18,6 +19,7 @@ import type { LoginDto } from './dto/login.dto.js';
 export class AuthService {
   constructor(
     private readonly users: UsersService,
+    private readonly dataRooms: DataRoomsService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService<Env, true>,
   ) {}
@@ -33,6 +35,9 @@ export class AuthService {
       name: dto.name,
       passwordHash: await argon2.hash(dto.password),
     });
+
+    // Every account starts with one data room so the app is never empty.
+    await this.dataRooms.create(user.id, 'My Data Room');
 
     return UsersService.toPublicUser(user);
   }
