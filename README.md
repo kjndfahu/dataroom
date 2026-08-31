@@ -161,6 +161,31 @@ pnpm --filter web lint
 
 ---
 
+## Deployment
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Web | Vercel | Root directory `apps/web`; the build is a normal Next.js build (`apps/web/vercel.json` pins the install/build commands and marks `/public/*` `noindex`) |
+| API | Railway (or any Docker host) | `apps/api/Dockerfile`, built from the repository root; `apps/api/railway.json` sets the Dockerfile path and `/health` as the health check |
+| Database | Supabase PostgreSQL | Migrations run on container start (`prisma migrate deploy`), so a deploy can never serve a schema it does not have |
+| Storage | Supabase Storage (private bucket) | Only the API holds the credentials |
+
+Cross-origin notes, since the two apps live on different domains:
+
+- set `CORS_ORIGINS` on the API to the exact Vercel URL (comma-separated if there
+  is more than one);
+- session cookies are issued with `SameSite=None; Secure` when `NODE_ENV` is
+  `production`, which is what makes the cross-site cookie work;
+- set `NEXT_PUBLIC_API_URL` on Vercel to the API's public URL, and
+  `NEXT_PUBLIC_APP_URL` to the web app's own URL — public share links are built
+  from it.
+
+The API image is deliberately self-sufficient: it installs OpenSSL for Prisma's
+query engine and pins pnpm at build time so a container never pauses to download
+a package manager on boot.
+
+---
+
 ## Environment variables
 
 Everything lives in `.env.example`. The API reads its variables through a Zod
