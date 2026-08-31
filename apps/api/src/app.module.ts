@@ -10,6 +10,8 @@ import { DataRoomsModule } from './datarooms/datarooms.module.js';
 import { FoldersModule } from './folders/folders.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { FilesModule } from './files/files.module.js';
+import { SharesModule } from './shares/shares.module.js';
+import { PublicLinksModule } from './public-links/public-links.module.js';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { FilesModule } from './files/files.module.js';
     FoldersModule,
     StorageModule,
     FilesModule,
+    SharesModule,
+    PublicLinksModule,
   ],
 })
 export class AppModule {}
