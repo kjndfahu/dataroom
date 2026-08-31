@@ -185,6 +185,31 @@ export class FoldersService {
     };
   }
 
+  /**
+   * Flat list of every folder in the room, for the move dialog. Flat rather
+   * than nested so the client can build the tree without a recursive payload.
+   */
+  async tree(
+    userId: string,
+    dataRoomId: string,
+  ): Promise<{
+    folders: Array<{ id: string; name: string; parentFolderId: string | null }>;
+    canEdit: boolean;
+  }> {
+    const grant = await this.authorization.requireDataRoomRead(
+      userId,
+      dataRoomId,
+    );
+
+    const folders = await this.prisma.folder.findMany({
+      where: { dataRoomId },
+      select: { id: true, name: true, parentFolderId: true },
+      orderBy: { name: 'asc' },
+    });
+
+    return { folders, canEdit: canEdit(grant) };
+  }
+
   /** Data room root → … → this folder. */
   async breadcrumbs(
     folderId: string,

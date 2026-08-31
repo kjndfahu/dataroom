@@ -18,6 +18,7 @@ import {
   type FolderContents,
 } from '../folders/listing.service.js';
 import { ListItemsQuery } from '../folders/dto/list-items.query.js';
+import { FoldersService } from '../folders/folders.service.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 
@@ -26,6 +27,7 @@ export class DataRoomsController {
   constructor(
     private readonly dataRooms: DataRoomsService,
     private readonly listing: ListingService,
+    private readonly folders: FoldersService,
   ) {}
 
   @Get()
@@ -51,6 +53,15 @@ export class DataRoomsController {
     @Query() query: ListItemsQuery,
   ): Promise<FolderContents> {
     return this.listing.listDataRoomRoot(user.id, id, query);
+  }
+
+  /** Folder tree of the room, used by the move dialog. */
+  @Get(':id/tree')
+  tree(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.folders.tree(user.id, id);
   }
 
   @Get(':id')

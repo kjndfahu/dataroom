@@ -10,7 +10,8 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
-import { buildUniqueName, normalizeName } from '../common/naming.js';
+import { buildUniqueName, normalizeName, splitExtension } from '../common/naming.js';
+import { canEdit } from '../authorization/access.types.js';
 import type { Env } from '../config/env.js';
 
 export const PDF_MIME_TYPE = 'application/pdf';
@@ -32,6 +33,7 @@ export type ConflictStrategy = 'fail' | 'keepBoth';
 @Injectable()
 export class FilesService {
   private readonly maxFileSize: number;
+  private readonly urlTtl: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -40,6 +42,7 @@ export class FilesService {
     config: ConfigService<Env, true>,
   ) {
     this.maxFileSize = config.get('MAX_FILE_SIZE', { infer: true });
+    this.urlTtl = config.get('S3_URL_TTL', { infer: true });
   }
 
   /**
@@ -142,6 +145,117 @@ export class FilesService {
     });
 
     return toFileDetail(file);
+  }
+
+  async findOne(userId: string, fileId: string): Promise<FileDetail & { canEdit: boolean }> {
+    const grant = await this.authorization.requireFileRead(userId, fileId);
+    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('That file no longer exists.');
+
+    return { ...toFileDetail(file), canEdit: canEdit(grant) };
+  }
+
+  /** A short-lived inline URL; the bucket itself stays private. */
+  async createPreviewUrl(
+    userId: string,
+    fileId: string,
+  ): Promise<{ url: string; name: string; size: number; expiresIn: number }> {
+    await this.authorization.requireFileRead(userId, fileId);
+
+    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('That file no longer exists.');
+
+    return this.previewUrlFor(file);
+  }
+
+  /** Shared with the public-link flow once access has been established. */
+  async previewUrlFor(file: {
+    storageKey: string;
+    name: string;
+    size: bigint;
+  }): Promise<{ url: string; name: string; size: number; expiresIn: number }> {
+    const url = await this.storage.createDownloadUrl(file.storageKey, {
+      fileName: file.name,
+      inline: true,
+    });
+
+    return {
+      url,
+      name: file.name,
+      size: Number(file.size),
+      expiresIn: this.urlTtl,
+    };
+  }
+
+  async rename(
+    userId: string,
+    fileId: string,
+    rawName: string,
+    onConflict: ConflictStrategy = 'fail',
+  ): Promise<FileDetail> {
+    await this.authorization.requireFileEdit(userId, fileId);
+
+    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('That file no longer exists.');
+
+    const name = ensurePdfExtension(normalizeName(rawName));
+    if (name === file.name) return toFileDetail(file);
+
+    const taken = await this.takenNames(file.dataRoomId, file.folderId, file.id);
+    const finalName = this.resolveName(name, taken, onConflict);
+
+    const updated = await this.prisma.file.update({
+      where: { id: fileId },
+      data: { name: finalName },
+    });
+
+    return toFileDetail(updated);
+  }
+
+  /** Moves a file to another folder (or the root) inside the same data room. */
+  async move(
+    userId: string,
+    fileId: string,
+    targetFolderId: string | null,
+    onConflict: ConflictStrategy = 'fail',
+  ): Promise<FileDetail> {
+    await this.authorization.requireFileEdit(userId, fileId);
+
+    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('That file no longer exists.');
+
+    if (file.folderId === targetFolderId) return toFileDetail(file);
+
+    await this.requireWritableLocation(userId, file.dataRoomId, targetFolderId);
+
+    const taken = await this.takenNames(file.dataRoomId, targetFolderId);
+    const finalName = this.resolveName(file.name, taken, onConflict);
+
+    const moved = await this.prisma.file.update({
+      where: { id: fileId },
+      data: { folderId: targetFolderId, name: finalName },
+    });
+
+    return toFileDetail(moved);
+  }
+
+  /**
+   * Storage object first, then the row: a failed blob delete is logged rather
+   * than leaving a row the user can see but not open.
+   */
+  async remove(
+    userId: string,
+    fileId: string,
+  ): Promise<{ id: string; orphanedObjects: number }> {
+    await this.authorization.requireFileEdit(userId, fileId);
+
+    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('That file no longer exists.');
+
+    const { failed } = await this.storage.deleteObjects([file.storageKey]);
+    await this.prisma.file.delete({ where: { id: fileId } });
+
+    return { id: fileId, orphanedObjects: failed.length };
   }
 
   /**
@@ -276,6 +390,12 @@ export class FilesService {
       throw new BadRequestException('Unknown upload.');
     }
   }
+}
+
+/** Renaming must not turn a PDF into an extension-less file. */
+function ensurePdfExtension(name: string): string {
+  const [, extension] = splitExtension(name);
+  return extension.toLowerCase() === '.pdf' ? name : `${name}.pdf`;
 }
 
 function parseDataRoomFromKey(storageKey: string): string | null {
