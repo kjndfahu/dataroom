@@ -58,7 +58,8 @@ export function CreateFolderDialog({
       open={open}
       onOpenChange={(next) => {
         if (create.isPending) return;
-        next ? setOpen(true) : close();
+        if (next) setOpen(true);
+        else close();
       }}
     >
       <DialogTrigger render={<Button variant="outline" />}>

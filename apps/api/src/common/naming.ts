@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
+// eslint-disable-next-line no-control-regex -- stripping control characters is the point
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
 const PATH_SEPARATORS = /[/\\]/g;
 

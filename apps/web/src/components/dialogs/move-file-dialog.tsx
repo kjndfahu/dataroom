@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Folder, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,21 +42,42 @@ export function MoveFileDialog({
   currentFolderId,
   file,
 }: MoveFileDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {/* Mounted only while open, so the selection always starts from the
+            file's current folder without syncing state in an effect. */}
+        {open && (
+          <MoveForm
+            dataRoomId={dataRoomId}
+            currentFolderId={currentFolderId}
+            file={file}
+            onDone={() => onOpenChange(false)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MoveForm({
+  dataRoomId,
+  currentFolderId,
+  file,
+  onDone,
+}: {
+  dataRoomId: string;
+  currentFolderId: string | null;
+  file: { id: string; name: string };
+  onDone: () => void;
+}) {
   const [target, setTarget] = useState<string | null>(currentFolderId);
   const [conflict, setConflict] = useState<string | null>(null);
   const refresh = useRefreshLocation(dataRoomId);
 
-  useEffect(() => {
-    if (open) {
-      setTarget(currentFolderId);
-      setConflict(null);
-    }
-  }, [open, currentFolderId]);
-
   const tree = useQuery({
     queryKey: queryKeys.dataRoomTree(dataRoomId),
     queryFn: () => dataRooms.tree(dataRoomId),
-    enabled: open,
   });
 
   const entries = useMemo(
@@ -74,7 +95,7 @@ export function MoveFileDialog({
     onSuccess: async (moved) => {
       await Promise.all([refresh(currentFolderId), refresh(moved.folderId)]);
       toast.success(`Moved “${moved.name}”`);
-      onOpenChange(false);
+      onDone();
     },
     onError: (cause) => {
       if (cause instanceof ApiError && cause.isConflict) {
@@ -88,97 +109,85 @@ export function MoveFileDialog({
   const unchanged = target === currentFolderId;
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (move.isPending) return;
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="truncate">Move “{file.name}”</DialogTitle>
-          <DialogDescription>
-            Choose the folder this file should live in.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <DialogHeader>
+        <DialogTitle className="truncate">Move “{file.name}”</DialogTitle>
+        <DialogDescription>
+          Choose the folder this file should live in.
+        </DialogDescription>
+      </DialogHeader>
 
-        <ScrollArea className="my-2 h-64 rounded-md border">
-          {tree.isPending ? (
-            <div className="space-y-2 p-3">
-              {[0, 1, 2, 3].map((index) => (
-                <Skeleton key={index} className="h-7 w-full" />
-              ))}
-            </div>
-          ) : tree.isError ? (
-            <p className="text-muted-foreground p-4 text-sm">
-              The folder list could not be loaded.
-            </p>
-          ) : (
-            <ul className="p-1.5">
+      <ScrollArea className="my-2 h-64 rounded-md border">
+        {tree.isPending ? (
+          <div className="space-y-2 p-3">
+            {[0, 1, 2, 3].map((index) => (
+              <Skeleton key={index} className="h-7 w-full" />
+            ))}
+          </div>
+        ) : tree.isError ? (
+          <p className="text-muted-foreground p-4 text-sm">
+            The folder list could not be loaded.
+          </p>
+        ) : (
+          <ul className="p-1.5">
+            <DestinationRow
+              label="Data room"
+              depth={0}
+              selected={target === null}
+              current={currentFolderId === null}
+              onSelect={() => {
+                setTarget(null);
+                setConflict(null);
+              }}
+            />
+            {entries.map((entry) => (
               <DestinationRow
-                label="Data room"
-                depth={0}
-                selected={target === null}
-                current={currentFolderId === null}
+                key={entry.id}
+                label={entry.name}
+                depth={entry.depth + 1}
+                selected={target === entry.id}
+                current={currentFolderId === entry.id}
                 onSelect={() => {
-                  setTarget(null);
+                  setTarget(entry.id);
                   setConflict(null);
                 }}
               />
-              {entries.map((entry) => (
-                <DestinationRow
-                  key={entry.id}
-                  label={entry.name}
-                  depth={entry.depth + 1}
-                  selected={target === entry.id}
-                  current={currentFolderId === entry.id}
-                  onSelect={() => {
-                    setTarget(entry.id);
-                    setConflict(null);
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-        </ScrollArea>
-
-        {conflict && (
-          <div className="bg-muted/60 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-sm">
-            <span className="text-muted-foreground">
-              A file with that name is already there. Keep both as
-            </span>
-            <span className="font-medium">“{conflict}”</span>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="ml-auto"
-              disabled={move.isPending}
-              onClick={() => move.mutate({ folderId: target, keepBoth: true })}
-            >
-              Keep both
-            </Button>
-          </div>
+            ))}
+          </ul>
         )}
+      </ScrollArea>
 
-        <DialogFooter>
+      {conflict && (
+        <div className="bg-muted/60 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            A file with that name is already there. Keep both as
+          </span>
+          <span className="font-medium">“{conflict}”</span>
           <Button
-            variant="outline"
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
             disabled={move.isPending}
-            onClick={() => onOpenChange(false)}
+            onClick={() => move.mutate({ folderId: target, keepBoth: true })}
           >
-            Cancel
+            Keep both
           </Button>
-          <Button
-            disabled={move.isPending || unchanged}
-            onClick={() => move.mutate({ folderId: target })}
-          >
-            {move.isPending && <Loader2 className="size-4 animate-spin" />}
-            {move.isPending ? "Moving…" : "Move"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+
+      <DialogFooter>
+        <Button variant="outline" disabled={move.isPending} onClick={onDone}>
+          Cancel
+        </Button>
+        <Button
+          disabled={move.isPending || unchanged}
+          onClick={() => move.mutate({ folderId: target })}
+        >
+          {move.isPending && <Loader2 className="size-4 animate-spin" />}
+          {move.isPending ? "Moving…" : "Move"}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 

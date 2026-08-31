@@ -163,5 +163,5 @@ export class StorageService {
 
 /** Keeps quotes and control characters out of the Content-Disposition header. */
 function sanitizeHeaderValue(value: string): string {
-  return value.replace(/[^\w .()\-]/g, '_');
+  return value.replace(/[^\w .()-]/g, '_');
 }
