@@ -103,6 +103,24 @@ export class StorageService {
     }
   }
 
+  /** Reads the first bytes of an object, used to verify the real file type. */
+  async readPrefix(storageKey: string, length: number): Promise<Buffer | null> {
+    try {
+      const object = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: storageKey,
+          Range: `bytes=0-${length - 1}`,
+        }),
+      );
+
+      const bytes = await object.Body?.transformToByteArray();
+      return bytes ? Buffer.from(bytes) : null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Best-effort removal. Storage failures must not block the database delete,
    * so unremoved keys are logged loudly instead of thrown.
